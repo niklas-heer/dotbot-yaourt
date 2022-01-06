@@ -1,16 +1,23 @@
-import os, subprocess, dotbot, time
+import os
+import subprocess
+import time
 from enum import Enum
+
+import dotbot
+
 
 class PkgStatus(Enum):
     # These names will be displayed
-    UP_TO_DATE = 'Up to date'
-    INSTALLED = 'Installed'
-    NOT_FOUND = 'Not Found'
+    UP_TO_DATE = "Up to date"
+    NOT_NEEDED = "Up to date [AUR]"
+    INSTALLED = "Installed"
+    NOT_FOUND = "Not Found"
     ERROR = "Build Error"
-    NOT_SURE = 'Could not determine'
+    NOT_SURE = "Could not determine"
+
 
 class Yaourt(dotbot.Plugin):
-    _directive = 'yaourt'
+    _directive = "yaourt"
 
     def __init__(self, context):
         super(Yaourt, self).__init__(self)
@@ -21,6 +28,7 @@ class Yaourt(dotbot.Plugin):
         self._strings[PkgStatus.UP_TO_DATE] = "there is nothing to do"
         self._strings[PkgStatus.INSTALLED] = "Optional dependencies for"
         self._strings[PkgStatus.NOT_FOUND] = "target not found"
+        self._strings[PkgStatus.NOT_NEEDED] = "No database errors have been found!"
         self._strings[PkgStatus.ERROR] = "==> ERROR:"
 
     def can_handle(self, directive):
@@ -28,18 +36,17 @@ class Yaourt(dotbot.Plugin):
 
     def handle(self, directive, data):
         if directive != self._directive:
-            raise ValueError('Yaourt cannot handle directive %s' %
-                directive)
+            raise ValueError("Yaourt cannot handle directive %s" % directive)
         return self._process(data)
 
     def _process(self, packages):
-        defaults = self._context.defaults().get('yaourt', {})
+        defaults = self._context.defaults().get("yaourt", {})
         results = {}
-        successful = [PkgStatus.UP_TO_DATE, PkgStatus.INSTALLED]
+        successful = [PkgStatus.UP_TO_DATE, PkgStatus.INSTALLED, PkgStatus.NOT_NEEDED]
 
         for pkg in packages:
             if isinstance(pkg, dict):
-                self._log.error('Incorrect format')
+                self._log.error("Incorrect format")
             elif isinstance(pkg, list):
                 # self._log.error('Incorrect format')
                 pass
@@ -50,31 +57,31 @@ class Yaourt(dotbot.Plugin):
             if result not in successful:
                 self._log.error("Could not install package '{}'".format(pkg))
 
-
         if all([result in successful for result in results.keys()]):
-            self._log.info('\nAll packages installed successfully')
+            self._log.info("\nAll packages installed successfully")
             success = True
         else:
             success = False
 
         for status, amount in results.items():
             log = self._log.info if status in successful else self._log.error
-            log('{} {}'.format(amount, status.value))
+            log("{} {}".format(amount, status.value))
 
         return success
 
     def _install(self, pkg):
         # to have a unified string which we can query
         # we need to execute the command with LANG=en_US.UTF-8
-        cmd = 'LANG=en_US.UTF-8 yaourt --needed --noconfirm -S {}'.format(pkg)
+        cmd = "LANG=en_US.UTF-8 yaourt --needed --noconfirm -S {}".format(pkg)
 
-        self._log.info("Installing \"{}\". Please wait...".format(pkg))
+        self._log.info('Installing "{}". Please wait...'.format(pkg))
 
         # needed to avoid conflicts due to locking
         time.sleep(1)
 
-        proc = subprocess.Popen(cmd, shell=True,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(
+            cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        )
         out = proc.stdout.read()
         proc.stdout.close()
 
@@ -82,5 +89,7 @@ class Yaourt(dotbot.Plugin):
             if out.decode("utf-8").find(self._strings[item]) >= 0:
                 return item
 
-        self._log.warning("Could not determine what happened with package {}".format(pkg))
+        self._log.warning(
+            "Could not determine what happened with package {}".format(pkg)
+        )
         return PkgStatus.NOT_SURE
